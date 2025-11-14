@@ -84,6 +84,17 @@ HTML_TEMPLATE = '''
             outline: none;
             border-color: #667eea;
         }
+        
+        .warning {
+            background: #fff3cd;
+            color: #856404;
+            padding: 10px;
+            border-radius: 8px;
+            margin-bottom: 15px;
+            text-align: center;
+            font-size: 0.9em;
+            display: none;
+        }
 
         button {
             padding: 10px 20px;
@@ -241,13 +252,14 @@ HTML_TEMPLATE = '''
         <div class="controls">
             <div class="input-group">
                 <label for="nInput">Nhập N:</label>
-                <input type="number" id="nInput" min="1" max="15" value="8">
+                <input type="number" id="nInput" min="1" max="20" value="8">
             </div>
             <button class="btn-solve" onclick="solve()">🎯 Giải</button>
             <button class="btn-next" id="btnNext" onclick="nextSolution()" disabled>⏭️ Lời giải tiếp</button>
             <button class="btn-reset" onclick="reset()">🔄 Reset</button>
         </div>
 
+        <div class="warning" id="warning"></div>
         <div class="status" id="status">Nhập N và nhấn "Giải" để bắt đầu</div>
 
         <div class="loading" id="loading">
@@ -314,20 +326,27 @@ HTML_TEMPLATE = '''
             const input = document.getElementById('nInput');
             n = parseInt(input.value);
 
-            if (n < 1 || n > 15) {
-                alert('N phải từ 1 đến 15!');
+            if (n < 1 || n > 20) {
+                alert('N phải từ 1 đến 20!');
                 return;
             }
 
-            if (n > 12) {
-                if (!confirm(`N=${n} có thể mất nhiều thời gian. Bạn có muốn tiếp tục?`)) {
+            if (n >= 13 && n <= 15) {
+                if (!confirm(`⚠️ CẢNH BÁO: N=${n} sẽ mất 30 giây - 5 phút để tính toán!\n\nServer sẽ chỉ trả về 100 lời giải đầu tiên.\n\nBạn có chắc muốn tiếp tục?`)) {
+                    return;
+                }
+            }
+            
+            if (n > 15) {
+                if (!confirm(`🔥 CẢNH BÁO NGHIÊM TRỌNG: N=${n} có thể mất 10-30 phút!\n\n⏱️ Server có thể timeout nếu quá lâu.\n💡 Khuyến nghị: Dùng N ≤ 15\n\nBạn THỰC SỰ muốn tiếp tục?`)) {
                     return;
                 }
             }
 
             document.getElementById('loading').style.display = 'block';
-            document.getElementById('status').textContent = `Đang giải N=${n} trên server...`;
+            document.getElementById('status').textContent = `⏳ Đang giải N=${n} trên server... Vui lòng đợi!`;
             document.getElementById('btnNext').disabled = true;
+            document.getElementById('warning').style.display = 'none';
 
             try {
                 const response = await fetch('/solve', {
@@ -348,8 +367,15 @@ HTML_TEMPLATE = '''
                     if (solutions.length > 0) {
                         drawBoard(solutions[0]);
                         document.getElementById('status').textContent = 
-                            `✅ Tìm thấy ${solutions.length} lời giải trong ${data.time}s`;
+                            `✅ Tìm thấy ${solutions.length}${data.warning ? '+' : ''} lời giải trong ${data.time}s`;
                         document.getElementById('btnNext').disabled = solutions.length <= 1;
+                        
+                        // Hiển thị warning nếu có
+                        if (data.warning) {
+                            const warningEl = document.getElementById('warning');
+                            warningEl.textContent = '⚠️ ' + data.warning;
+                            warningEl.style.display = 'block';
+                        }
                     } else {
                         document.getElementById('board').innerHTML = '';
                         document.getElementById('status').textContent = '❌ Không có lời giải!';
@@ -357,11 +383,11 @@ HTML_TEMPLATE = '''
 
                     updateStats(n, solutions.length, currentIndex, data.time);
                 } else {
-                    document.getElementById('status').textContent = '❌ Lỗi: ' + data.error;
+                    document.getElementById('status').textContent = '❌ ' + data.error;
                 }
             } catch (error) {
                 document.getElementById('loading').style.display = 'none';
-                document.getElementById('status').textContent = '❌ Lỗi kết nối server!';
+                document.getElementById('status').textContent = '❌ Lỗi kết nối server hoặc timeout!';
                 console.error(error);
             }
         }
@@ -384,6 +410,7 @@ HTML_TEMPLATE = '''
             document.getElementById('status').textContent = 'Nhập N và nhấn "Giải" để bắt đầu';
             document.getElementById('nInput').value = '8';
             document.getElementById('btnNext').disabled = true;
+            document.getElementById('warning').style.display = 'none';
             updateStats('-', '-', '-', '-');
         }
 
@@ -403,10 +430,11 @@ HTML_TEMPLATE = '''
 </html>
 '''
 
-# Thuật toán Backtracking giải N-Queens
-def solve_n_queens(n):
+# Thuật toán Backtracking giải N-Queens với giới hạn
+def solve_n_queens_limited(n, max_solutions=None):
     """
     Giải bài toán N-Queens bằng thuật toán Backtracking
+    Có thể giới hạn số lời giải để tránh quá tải với N lớn
     """
     solutions = []
     board = [-1] * n
@@ -415,6 +443,10 @@ def solve_n_queens(n):
     diag2 = set()
     
     def backtrack(row):
+        # Dừng sớm nếu đã đủ số lời giải
+        if max_solutions and len(solutions) >= max_solutions:
+            return
+            
         if row == n:
             solutions.append(board[:])
             return
@@ -453,30 +485,47 @@ def solve():
         data = request.get_json()
         n = int(data.get('n', 8))
         
-        if n < 1 or n > 15:
+        if n < 1:
             return jsonify({
                 'success': False,
-                'error': 'N phải từ 1 đến 15'
+                'error': 'N phải lớn hơn 0'
             })
+        
+        if n > 20:
+            return jsonify({
+                'success': False,
+                'error': 'N không được vượt quá 20 (quá chậm)'
+            })
+        
+        # Giới hạn số lời giải trả về cho N lớn để tránh quá tải
+        max_solutions = 100 if n >= 13 else None
         
         # Tính thời gian
         start_time = time.time()
-        solutions = solve_n_queens(n)
-        end_time = time.time()
         
+        # Thêm timeout protection
+        solutions = solve_n_queens_limited(n, max_solutions)
+        
+        end_time = time.time()
         time_taken = round(end_time - start_time, 3)
+        
+        # Cảnh báo nếu quá nhiều solutions
+        warning = None
+        if max_solutions and len(solutions) >= max_solutions:
+            warning = f'Chỉ hiển thị {max_solutions} lời giải đầu tiên'
         
         return jsonify({
             'success': True,
             'solutions': solutions,
             'count': len(solutions),
-            'time': time_taken
+            'time': time_taken,
+            'warning': warning
         })
         
     except Exception as e:
         return jsonify({
             'success': False,
-            'error': str(e)
+            'error': f'Lỗi server: {str(e)}'
         })
 
 if __name__ == '__main__':
