@@ -66,7 +66,7 @@ HTML_TEMPLATE = '''<!DOCTYPE html>
             </div>
             <button class="btn-solve" id="btnSolve" onclick="solveStreaming()">🎯 Giải</button>
             <button class="btn-stop" id="btnStop" onclick="stopSolving()" style="display:none;">⏹️ Dừng</button>
-            <button class="btn-next" id="btnNext" onclick="nextSolution()" disabled>⏭️ Lời giải tiếp</button>
+            <button class="btn-next" id="btnNext" onclick="nextSolution()" disabled>⏭️ Next Solution</button>
             <button class="btn-reset" onclick="reset()">🔄 Reset</button>
         </div>
 
@@ -401,3 +401,4 @@ if __name__ == '__main__':
 
     # debug=True hữu ích khi dev, threaded=True cho khả năng nhiều kết nối nhẹ
     app.run(debug=True, host='0.0.0.0', port=5000, threaded=True)
+
