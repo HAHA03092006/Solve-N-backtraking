@@ -1,1 +1,1 @@
-web: gunicorn n-backtracking(giao diện):app
+web: gunicorn n-backtracking:app
