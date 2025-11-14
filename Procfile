@@ -1,1 +1,1 @@
-web: gunicorn n-backtracking:app
+web: gunicorn app:app
