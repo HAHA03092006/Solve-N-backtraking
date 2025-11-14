@@ -1,8 +1,6 @@
 from flask import Flask, render_template_string, request, jsonify, Response
 import time
 import json
-from threading import Thread
-import queue
 
 app = Flask(__name__)
 
@@ -151,7 +149,7 @@ HTML_TEMPLATE = '''
             background: linear-gradient(135deg, #ff9800, #f57c00);
         }
 
-        button:hover {
+        button:hover:not(:disabled) {
             transform: translateY(-2px);
             box-shadow: 0 5px 15px rgba(0,0,0,0.2);
         }
@@ -283,29 +281,38 @@ HTML_TEMPLATE = '''
             border-radius: 4px;
             font-size: 0.9em;
             color: #1565c0;
+            display: none;
+        }
+        
+        .warning-box {
+            background: #fff3cd;
+            border-left: 4px solid #ffc107;
+            padding: 12px;
+            margin-bottom: 15px;
+            border-radius: 4px;
+            font-size: 0.9em;
+            color: #856404;
+            display: none;
         }
     </style>
 </head>
 <body>
     <div class="container">
         <h1>♛ N-Queens Solver ♛</h1>
-        <p class="subtitle">Giải bài toán N hậu bằng thuật toán Backtracking - Streaming Mode</p>
-
-        <div class="info-box">
-            💡 <strong>Streaming Mode:</strong> Tìm toàn bộ lời giải cho N lớn (tới 15) mà không bị timeout!<br>
-            ⚠️ <strong>Giới hạn:</strong> N từ 1 đến 15 (N=15 có thể mất 30-60 phút)
-        </div>
+        <p class="subtitle">Giải bài toán N hậu bằng thuật toán Backtracking</p>
 
         <div class="controls">
             <div class="input-group">
                 <label for="nInput">Nhập N:</label>
                 <input type="number" id="nInput" min="1" max="15" value="8">
             </div>
-            <button class="btn-solve" id="btnSolve" onclick="solveStreaming()">🎯 Giải (Stream)</button>
+            <button class="btn-solve" id="btnSolve" onclick="solveStreaming()">🎯 Giải</button>
             <button class="btn-stop" id="btnStop" onclick="stopSolving()" style="display:none;">⏹️ Dừng</button>
             <button class="btn-next" id="btnNext" onclick="nextSolution()" disabled>⏭️ Lời giải tiếp</button>
             <button class="btn-reset" onclick="reset()">🔄 Reset</button>
         </div>
+        
+        <div class="warning-box" id="warningBox"></div>
 
         <div class="progress-container" id="progressContainer">
             <div class="progress-text" id="progressText">Đang tìm lời giải...</div>
@@ -381,6 +388,8 @@ HTML_TEMPLATE = '''
         async function solveStreaming() {
             const input = document.getElementById('nInput');
             n = parseInt(input.value);
+            const warningBox = document.getElementById('warningBox');
+            warningBox.style.display = 'none';
 
             if (isNaN(n) || n < 1) {
                 alert('❌ Vui lòng nhập số nguyên dương!');
@@ -388,15 +397,24 @@ HTML_TEMPLATE = '''
             }
 
             if (n > 15) {
-                alert('❌ N không được vượt quá 15!\n\n💡 Giới hạn này để đảm bảo server hoạt động ổn định.');
+                alert('❌ N không được vượt quá 15!');
                 return;
             }
 
-            if (n >= 13) {
-                const estimatedTime = n === 13 ? '1-2 phút' : n === 14 ? '5-10 phút' : '30-60 phút';
-                const estimatedSolutions = n === 13 ? '73,712' : n === 14 ? '365,596' : '2,279,184';
+            // Hiển thị cảnh báo cho N lớn
+            if (n >= 13 && n <= 15) {
+                const warnings = {
+                    13: { time: '1-2 phút', solutions: '73,712' },
+                    14: { time: '5-10 phút', solutions: '365,596' },
+                    15: { time: '30-60 phút', solutions: '2,279,184' }
+                };
                 
-                if (!confirm(`⚠️ CẢNH BÁO: N=${n}\n\n⏱️ Thời gian dự kiến: ${estimatedTime}\n📊 Số lời giải: ~${estimatedSolutions}\n\n💡 Streaming mode sẽ tìm TOÀN BỘ lời giải mà không bị timeout.\n\n✅ Bạn có muốn tiếp tục?`)) {
+                const info = warnings[n];
+                warningBox.innerHTML = `⚠️ <strong>CẢNH BÁO:</strong> N=${n} sẽ mất khoảng <strong>${info.time}</strong> để tính toán. Tổng số lời giải dự kiến: <strong>${info.solutions}</strong>`;
+                warningBox.style.display = 'block';
+                
+                if (!confirm(`⚠️ N=${n} sẽ mất khoảng ${info.time} để tính toán.\n\n📊 Tổng số lời giải dự kiến: ${info.solutions}\n\nBạn có muốn tiếp tục?`)) {
+                    warningBox.style.display = 'none';
                     return;
                 }
             }
@@ -430,7 +448,7 @@ HTML_TEMPLATE = '''
                     
                     buffer += decoder.decode(value, {stream: true});
                     const lines = buffer.split('\n');
-                    buffer = lines.pop(); // Keep incomplete line in buffer
+                    buffer = lines.pop();
 
                     for (const line of lines) {
                         if (!line.trim() || !line.startsWith('data: ')) continue;
@@ -441,14 +459,12 @@ HTML_TEMPLATE = '''
                             if (data.type === 'solution') {
                                 solutions.push(data.board);
                                 
-                                // Update UI periodically
                                 if (solutions.length === 1 || solutions.length % 100 === 0) {
                                     drawBoard(data.board);
                                     document.getElementById('status').textContent = 
                                         `🔍 Đang tìm... Đã tìm được ${solutions.length} lời giải`;
                                 }
                                 
-                                // Update progress (rough estimate based on first column choices)
                                 const progress = Math.min(95, (data.board[0] / n) * 100);
                                 updateProgress(progress, solutions.length);
                             } else if (data.type === 'complete') {
@@ -527,6 +543,7 @@ HTML_TEMPLATE = '''
             document.getElementById('btnSolve').style.display = 'inline-block';
             document.getElementById('btnStop').style.display = 'none';
             document.getElementById('progressContainer').style.display = 'none';
+            document.getElementById('warningBox').style.display = 'none';
             updateStats('-', '-', '-', '-');
         }
 
@@ -618,7 +635,7 @@ def solve_stream():
         return Response(generate(), mimetype='text/event-stream')
         
     except Exception as e:
-        return jsonify({'success': False, 'error': str(e)})
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 if __name__ == '__main__':
     print("=" * 60)
@@ -627,6 +644,7 @@ if __name__ == '__main__':
     print("📱 Server đang chạy tại: http://127.0.0.1:5000")
     print("🌐 Mở trình duyệt và truy cập link trên")
     print("✨ Streaming mode: Tìm TOÀN BỘ lời giải không bị timeout!")
+    print("⚠️ Giới hạn: N từ 1 đến 15")
     print("⭐ Nhấn Ctrl+C để dừng server")
     print("=" * 60)
     
