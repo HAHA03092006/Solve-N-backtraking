@@ -292,7 +292,8 @@ HTML_TEMPLATE = '''
         <p class="subtitle">Giải bài toán N hậu bằng thuật toán Backtracking - Streaming Mode</p>
 
         <div class="info-box">
-            💡 <strong>Streaming Mode:</strong> Tìm toàn bộ lời giải cho N lớn (tới 15) mà không bị timeout!
+            💡 <strong>Streaming Mode:</strong> Tìm toàn bộ lời giải cho N lớn (tới 15) mà không bị timeout!<br>
+            ⚠️ <strong>Giới hạn:</strong> N từ 1 đến 15 (N=15 có thể mất 30-60 phút)
         </div>
 
         <div class="controls">
@@ -381,13 +382,21 @@ HTML_TEMPLATE = '''
             const input = document.getElementById('nInput');
             n = parseInt(input.value);
 
-            if (n < 1 || n > 15) {
-                alert('N phải từ 1 đến 15!');
+            if (isNaN(n) || n < 1) {
+                alert('❌ Vui lòng nhập số nguyên dương!');
+                return;
+            }
+
+            if (n > 15) {
+                alert('❌ N không được vượt quá 15!\n\n💡 Giới hạn này để đảm bảo server hoạt động ổn định.');
                 return;
             }
 
             if (n >= 13) {
-                if (!confirm(`⚠️ N=${n} sẽ mất thời gian (có thể 1-10 phút).\n\nStreaming mode sẽ tìm TOÀN BỘ lời giải mà không bị timeout.\n\nBạn có muốn tiếp tục?`)) {
+                const estimatedTime = n === 13 ? '1-2 phút' : n === 14 ? '5-10 phút' : '30-60 phút';
+                const estimatedSolutions = n === 13 ? '73,712' : n === 14 ? '365,596' : '2,279,184';
+                
+                if (!confirm(`⚠️ CẢNH BÁO: N=${n}\n\n⏱️ Thời gian dự kiến: ${estimatedTime}\n📊 Số lời giải: ~${estimatedSolutions}\n\n💡 Streaming mode sẽ tìm TOÀN BỘ lời giải mà không bị timeout.\n\n✅ Bạn có muốn tiếp tục?`)) {
                     return;
                 }
             }
@@ -584,8 +593,12 @@ def solve_stream():
     try:
         n = int(request.args.get('n', 8))
         
-        if n < 1 or n > 15:
-            return jsonify({'success': False, 'error': 'N phải từ 1 đến 15'})
+        # Kiểm tra giới hạn N
+        if n < 1:
+            return jsonify({'success': False, 'error': 'N phải là số nguyên dương (N ≥ 1)'}), 400
+            
+        if n > 15:
+            return jsonify({'success': False, 'error': 'N không được vượt quá 15. Vui lòng chọn N từ 1 đến 15.'}), 400
         
         def generate():
             """Generator function để stream Server-Sent Events"""
